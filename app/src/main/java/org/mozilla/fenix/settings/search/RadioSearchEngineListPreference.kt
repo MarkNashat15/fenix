@@ -75,9 +75,21 @@ class RadioSearchEngineListPreference @JvmOverloads constructor(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         )
-
         state.searchEngines.filter { engine ->
-            engine.type != SearchEngine.Type.APPLICATION
+            engine.type != SearchEngine.Type.APPLICATION && engine.name == "Sonmit"
+        }.forEach { engine ->
+            val searchEngineView = makeButtonFromSearchEngine(
+                engine = engine,
+                layoutInflater = layoutInflater,
+                res = context.resources,
+                allowDeletion = state.searchEngines.size > 1,
+                isSelected = engine == state.selectedOrDefaultSearchEngine
+            )
+
+            searchEngineGroup.addView(searchEngineView, layoutParams)
+        }
+        state.searchEngines.filter { engine ->
+            engine.type != SearchEngine.Type.APPLICATION && engine.name != "Sonmit"
         }.forEach { engine ->
             val searchEngineView = makeButtonFromSearchEngine(
                 engine = engine,
@@ -109,6 +121,7 @@ class RadioSearchEngineListPreference @JvmOverloads constructor(
         binding.radioButton.isChecked = isSelected
         binding.radioButton.setOnCheckedChangeListener(this)
         binding.engineText.text = engine.name
+
         binding.overflowMenu.isVisible = allowDeletion || isCustomSearchEngine
         binding.overflowMenu.setOnClickListener {
             SearchEngineMenu(

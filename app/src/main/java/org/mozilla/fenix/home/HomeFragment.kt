@@ -50,6 +50,7 @@ import mozilla.components.browser.state.selector.findTab
 import mozilla.components.browser.state.selector.normalTabs
 import mozilla.components.browser.state.selector.privateTabs
 import mozilla.components.browser.state.state.BrowserState
+import mozilla.components.browser.state.state.searchEngines
 import mozilla.components.browser.state.state.selectedOrDefaultSearchEngine
 import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.concept.storage.FrecencyThresholdOption
@@ -110,6 +111,7 @@ import org.mozilla.fenix.home.topsites.DefaultTopSitesView
 import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.onboarding.FenixOnboarding
 import org.mozilla.fenix.perf.MarkersFragmentLifecycleCallbacks
+import org.mozilla.fenix.perf.Performance.logger
 import org.mozilla.fenix.tabstray.TabsTrayAccessPoint
 import org.mozilla.fenix.utils.Settings.Companion.TOP_SITES_PROVIDER_MAX_THRESHOLD
 import org.mozilla.fenix.utils.ToolbarPopupWindow
@@ -560,27 +562,47 @@ class HomeFragment : Fragment() {
             MarkersFragmentLifecycleCallbacks.MARKER_NAME, profilerStartTime, "HomeFragment.onViewCreated",
         )
         //////////////////////////////
-        //val pref = requireContext().getSharedPreferences("seREFprefAAD", Context.MODE_PRIVATE)
-        //val isInitialized = pref.getBoolean("isInitialized", false) ?: false
-        lifecycleScope.launchWhenCreated {
-            //if (!isInitialized) {
-            //
-            //    pref.edit().putBoolean("isInitialized", true)
-            //    pref.edit().commit()
-            //}
-            try {
-                Log.d("AR-TAG", "onViewCreated: Trying")
-                val searchEngine = createSearchEngine(
-                    "Sonmit",
-                    "https://www.sonmit.com/search/web?sc=&q=%s".toSearchUrl(),
-                    requireComponents.core.icons.loadIcon(IconRequest("https://www.sonmit.com/")).await().bitmap
-                )
-                requireComponents.useCases.searchUseCases.addSearchEngine(searchEngine)
-                Log.e("AR-TAG", "onViewCreated: Added")
-            } catch (e: Exception) {
-                Log.e("AR-TAG", "onViewCreated: A -> ", e)
+        try {
+            val oldThreadPolicy = StrictMode.getThreadPolicy()
+            StrictMode.setThreadPolicy(
+                StrictMode.ThreadPolicy.Builder(oldThreadPolicy).permitDiskReads().permitDiskWrites().permitAll().build()
+            )
+            //StrictMode.setThreadPolicy(oldThreadPolicy)
+            val sonmitSP = requireContext().getSharedPreferences("SonmitSP", Context.MODE_PRIVATE)
+            val isInitialized = sonmitSP.getBoolean("isInitializedS", false)
+            val isFirstTime = sonmitSP.getBoolean("isFirstTime", false)
+            if (!isInitialized && !isFirstTime) {
+                logger.debug("Welcomewww")
+                lifecycleScope.launchWhenCreated {
+                    try {
+                        Log.d("AR-TAG", "onViewCreated: Trying")
+                        val process = launch {
+                            val searchEngine = createSearchEngine(
+                                "Sonmit",
+                                "https://www.sonmit.com/search/web?sc=&q=%s".toSearchUrl(),
+                                requireComponents.core.icons.loadIcon(IconRequest("https://www.sonmit.com/")).await().bitmap
+                            )
+                            requireComponents.useCases.searchUseCases.addSearchEngine(searchEngine)
+                        }
+                        process.join()
+                        Log.e("AR-TAG", "onViewCreated: Added")
+                        sonmitSP.edit().putBoolean("isInitializedS", true).apply()
+                        selectedDefEngine()
+                        sonmitSP.edit().putBoolean("isFirstTime", true).apply()
+                    } catch (e: Exception) {
+                        Log.e("AR-TAG", "onViewCreated: A -> ", e)
+                    }
+                }
             }
+        } catch (e: Exception) {
+            logger.error("ARE", e)
         }
+    }
+
+    private fun selectedDefEngine() {
+        val engine = requireContext().components.core.store.state.search.searchEngines.find { searchEngine -> searchEngine.name == "Sonmit" }
+        if (engine != null) requireContext().components.useCases.searchUseCases.selectSearchEngine(engine)
+        else selectedDefEngine()
     }
 
     private fun String.toSearchUrl(): String {
